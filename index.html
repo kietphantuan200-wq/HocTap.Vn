@@ -1,0 +1,254 @@
+hoctapvn/
+│
+├── client/                # Frontend Next.js
+│   ├── pages/
+│   │   ├── index.js
+│   │   ├── login.js
+│   │   ├── subjects.js
+│   │   ├── test.js
+│   │   ├── ai.js
+│   │   └── admin.js
+│   ├── components/
+│   │   ├── Navbar.js
+│   │   ├── QuestionCard.js
+│   │   └── Timer.js
+│   └── styles/globals.css
+│
+├── server/                # Backend
+│   ├── models/
+│   ├── routes/
+│   ├── middleware/
+│   ├── utils/
+│   └── server.js
+│
+├── .env
+└── README.md
+MONGO_URI=mongodb://127.0.0.1:27017/hoctapvn
+JWT_SECRET=supersecret
+GEMINI_API_KEY=AIzaSyAnNcys2P9ytosPJGRTc1rS7Me0S9wWcY4
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+mongoose.connect(process.env.MONGO_URI)
+.then(() => console.log("DB Connected"));
+
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/ai", require("./routes/ai"));
+app.use("/api/test", require("./routes/test"));
+app.use("/api/admin", require("./routes/admin"));
+
+app.listen(5000, () => console.log("Server running"));
+const router = require("express").Router();
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+router.post("/register", async (req, res) => {
+  const { username, password, backupPassword } = req.body;
+
+  const user = new User({
+    username,
+    password: await bcrypt.hash(password, 10),
+    backupPassword: await bcrypt.hash(backupPassword, 10)
+  });
+
+  await user.save();
+  res.json("OK");
+});
+
+router.post("/login", async (req, res) => {
+  const user = await User.findOne({ username });
+
+  if (!user) return res.status(400).json("No user");
+
+  const valid = await bcrypt.compare(req.body.password, user.password);
+  if (!valid) return res.status(400).json("Sai mk");
+
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+
+  res.json({ token, user });
+});
+
+module.exports = router;
+const router = require("express").Router();
+const axios = require("axios");
+
+router.post("/ask", async (req, res) => {
+  const { question } = req.body;
+
+  const r = await axios.post(
+    "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent",
+    {
+      contents: [{ parts: [{ text: question }] }]
+    },
+    {
+      params: { key: process.env.GEMINI_API_KEY }
+    }
+  );
+
+  res.json(r.data);
+});
+
+module.exports = router;
+ const router = require("express").Router();
+
+router.post("/generate", async (req, res) => {
+  const { text } = req.body;
+
+  // giả lập AI
+  res.json([
+    {
+      question: "2+2=?",
+      options: ["1", "2", "3", "4"],
+      answer: "4"
+    }
+  ]);
+});
+
+module.exports = router;
+const router = require("express").Router();
+const User = require("../models/User");
+
+router.get("/users", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
+});
+
+router.post("/ban", async (req, res) => {
+  const { id } = req.body;
+
+  await User.findByIdAndUpdate(id, { isBanned: true });
+
+  res.json("Banned");
+});
+
+module.exports = router;
+export default function Home() {
+  return (
+    <div className="bg-black h-screen flex flex-col justify-center items-center text-white">
+      
+      <div className="w-40 h-40 bg-white text-black flex items-center justify-center shadow-lg">
+        HocTap.Vn
+      </div>
+
+      <button className="mt-6 px-6 py-2 bg-purple-500">
+        Bắt đầu
+      </button>
+    </div>
+  );
+}
+import axios from "axios";
+import { useState } from "react";
+
+export default function Login() {
+  const [u, setU] = useState("");
+  const [p, setP] = useState("");
+
+  const login = async () => {
+    const res = await axios.post("http://localhost:5000/api/auth/login", {
+      username: u,
+      password: p
+    });
+
+    localStorage.setItem("token", res.data.token);
+  };
+
+  return (
+    <div>
+      <input onChange={e => setU(e.target.value)} placeholder="Tên"/>
+      <input type="password" onChange={e => setP(e.target.value)} />
+      <button onClick={login}>Login</button>
+    </div>
+  );
+}
+const subjects = [
+  "Ngữ văn",
+  "Anh văn",
+  "Toán",
+  "KHTN (Lý, Hóa, Sinh)",
+  "Lịch sử địa lý",
+  "GDCD",
+  "Công nghệ",
+  "Tin học"
+];
+
+export default function Subjects() {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {subjects.map((s, i) => (
+        <div key={i} className="p-4 bg-gray-800 text-white">
+          {s}
+        </div>
+      ))}
+    </div>
+  );
+}
+import { useState } from "react";
+
+export default function Test() {
+  const [q, setQ] = useState([]);
+
+  const load = async () => {
+    const r = await fetch("http://localhost:5000/api/test/generate", {
+      method: "POST",
+      body: JSON.stringify({ text: "abc" }),
+      headers: { "Content-Type": "application/json" }
+    });
+
+    setQ(await r.json());
+  };
+
+  return (
+    <div>
+      <button onClick={load}>Tạo đề</button>
+
+      {q.map((item, i) => (
+        <div key={i}>
+          <h3>{item.question}</h3>
+          {item.options.map((o, j) => (
+            <div key={j}>{o}</div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+import axios from "axios";
+import { useState } from "react";
+
+export default function AI() {
+  const [msg, setMsg] = useState("");
+  const [chat, setChat] = useState([]);
+
+  const send = async () => {
+    const res = await axios.post("http://localhost:5000/api/ai/ask", {
+      question: msg
+    });
+
+    setChat([...chat, res.data]);
+  };
+
+  return (
+    <div>
+      <input onChange={e => setMsg(e.target.value)} />
+      <button onClick={send}>Gửi</button>
+
+      {chat.map((c, i) => (
+        <div key={i}>{JSON.stringify(c)}</div>
+      ))}
+    </div>
+  );
+}
+cd server
+npm install
+node server.js
+cd client
+npm install
+npm run dev
